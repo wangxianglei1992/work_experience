@@ -7,7 +7,7 @@ LK启动流程：
 				
 				// early arch stuff
 				lk_primary_cpu_init_level(LK_INIT_LEVEL_EARLIEST, LK_INIT_LEVEL_ARCH_EARLY - 1);	
-				arch_early_init();			
+				arch_early_init();	//初始化线程系统			
 				
 				// do any super early platform initialization
 				lk_primary_cpu_init_level(LK_INIT_LEVEL_ARCH_EARLY, LK_INIT_LEVEL_PLATFORM_EARLY - 1);
@@ -21,11 +21,11 @@ LK启动流程：
 				// bring up the kernel heap
 				lk_primary_cpu_init_level(LK_INIT_LEVEL_TARGET_EARLY, LK_INIT_LEVEL_HEAP - 1);
 				dprintf(SPEW, "initializing heap\n");
-				heap_init();
+				heap_init();	//相关的堆栈初始化
 				
 				// deal with any static constructors
 				dprintf(SPEW, "calling constructors\n");
-				//call_constructors();
+				call_constructors();	//构造函数相关初始化
                                                                                                                           
 				// initialize the kernel
 				lk_primary_cpu_init_level(LK_INIT_LEVEL_HEAP, LK_INIT_LEVEL_KERNEL - 1);
@@ -34,8 +34,37 @@ LK启动流程：
 				lk_primary_cpu_init_level(LK_INIT_LEVEL_KERNEL, LK_INIT_LEVEL_THREADING - 1);
  
 				// create a thread to complete system initialization
+				// 新建线程入口函数 bootstrap2 
 				dprintf(SPEW, "creating bootstrap completion thread\n");
 				thread_t *t = thread_create("bootstrap2", &bootstrap2, NULL, DEFAULT_PRIORITY, DEFAULT_STACK_SIZE);
+					return thread_create_etc(NULL, name, entry, arg, priority, NULL, stack_size);
+						* 这个函数创建一个新线程。线程最初是挂起的，因此需要调用thread_resume()来执行它。
+						*
+						* @param  name        线程的名字
+						* @param  entry       线程的入口点
+						* @param  arg         传递给entry()的任意参数
+						* @param  priority    线程的执行优先权
+						* @param  stack_size  线程的堆栈大小
+				
+						&bootstrap2
+							arch_init();	//架构初始化
+							platform_init();	//平台初始化（platform/mt2712）
+							target_init();	//目标设备初始化（target/leepi_15s_emmc_ab）
+								emmc_init_stage2(card, retry_opcond);
+							apps_init()		///* one time setup */
+								__apps_start = .;	//（app/app.ld）
+								KEEP (*(.apps))
+								__apps_end = .;
+								------->
+								------->
+								APP_START(appname)	//（include/app.h）
+									avbboot_task()	//（重点函数）
+								
+								
+				
+				
+				
+				
 				thread_set_pinned_cpu(t, 0);
 				thread_detach(t);
 				thread_resume(t);
