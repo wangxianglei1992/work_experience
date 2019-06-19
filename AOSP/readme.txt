@@ -6,3 +6,6 @@ Android repo：
 
 拉取内核代码：
 	git clone https://android.googlesource.com/kernel/common
+
+拉取lk源码：
+	git clone https://github.com/littlekernel/lk.git
