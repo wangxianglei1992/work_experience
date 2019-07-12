@@ -1,0 +1,52 @@
+Android 启动流程：init-->systemserver
+
+system/core/init/ init.cpp
+	int main(int argc, char** argv) {
+	// 在/上的initramdisk中获得我们需要的基本文件系统设置，然后让rc文件来解决其余的问题。
+		mount()	//挂载文件系统
+		mkdir()	
+		mknod()	//创建设备节点
+		//*****//
+		InitKernelLogging(argv);	//初始化内核log系统
+		SetInitAvbVersionInRecovery();
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+以上创建并挂载的五类文件系统分别如下所示：
+tmpfs：一种虚拟内存文件系统，它会将所有的文件存储在虚拟内存中，
+	如果你将tmpfs文件系统卸载后，那么其下的所有的内容将不复存在。
+	tmpfs既可以使用RAM，也可以使用交换分区，会根据你的实际需要而改变大小。
+	tmpfs的速度非常惊人，毕竟它是驻留在RAM中的，即使用了交换分区，
+	性能仍然非常卓越。由于tmpfs是驻留在RAM的，因此它的内容是不持久的。
+	断电后，tmpfs的内容就消失了，这也是被称作tmpfs的根本原因。
+
+
+devpts：为伪终端提供了一个标准接口，它的标准挂接点是/dev/ pts。
+	只要pty的主复合设备/dev/ptmx被打开，就会在/dev/pts下动态的创建一个新的pty设备文件。
+
+
+proc：一个非常重要的虚拟文件系统，它可以看作是内核内部数据结构的接口，
+	通过它我们可以获得系统的信息，同时也能够在运行时修改特定的内核参数。
+
+
+sysfs：与proc文件系统类似，也是一个不占有任何磁盘空间的虚拟文件系统。
+	它通常被挂接在/sys目录下。sysfs文件系统是Linux2.6内核引入的，
+	它把连接在系统上的设备和总线组织成为一个分级的文件，使得它们可以在用户空间存取。
+
+
+selinuxfs：用于支持SELinux的文件系统，SELinux提供了一套规则来编写安全策略文件，
+	这套规则被称之为 SELinux Policy 语言。
+
+作者：顾林海
+链接：https://juejin.im/post/5c4071f65188253a7e5ece65
+来源：掘金
+著作权归作者所有。商业转载请联系作者获得授权，非商业转载请注明出处。
