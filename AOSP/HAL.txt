@@ -1,0 +1,195 @@
+1.操作驱动节点的三个基本函数：open、write、close
+
+2.AOSP/hardware/interfaces/light结构目录
+	.
+	├── 2.0
+	│   ├── Android.bp
+	│   ├── default
+	│   │   ├── Android.bp
+	│   │   ├── android.hardware.light@2.0-service.rc
+	│   │   ├── Light.cpp
+	│   │   ├── Light.h
+	│   │   └── service.cpp
+	│   ├── ILight.hal
+	│   ├── types.hal
+	│   └── vts
+	│       └── functional
+	│           ├── Android.bp
+	│           └── VtsHalLightV2_0TargetTest.cpp
+	└── utils
+	    ├── Android.bp
+	    ├── blank_screen.rc
+	    └── main.cpp
+
+3.基本.hal文件：
+	types.hal定义的是一些数据结构，
+	Ilight.hal定义的是从Framework往HAL调用的接口，
+
+4.搭建基本目录框架，添加必要的文件后，执行./update-makefiles.sh，即可生成一些bp文件，mk文件及一些必要的东西。
+
+说明：
+	Android中通过hw_get_module实现对HAL的调用。
+函数原型：int hw_get_module(const char *id, const struct hw_module_t **module); 
+id指定Hardware的id，如果找到了对应的hw_module_t结构体，会将其指针放入*module中。
+
+#define LIGHTS_HARDWARE_MODULE_ID "lights"
+注：
+load函数中：
+#define HAL_MODULE_INFO_SYM_AS_STR  "HMI"
+hmi = (struct hw_module_t *)dlsym(handle, sym);
+查找“HMI”这个导出符号，并获取其地址。（根据“HMI”这个导出符号）就可以从动态链接库中找到结构体hw_module_t
+*.so是一个elf格式的文件，而一个ELF文件的开始，保存了路线图（road map），描述了该文件的组织情况，sections保存
+着object文件的信息，从链接角度看：包括指令、数据、符号表、重定位信息等，
+可以使用：file *.so   和   readelf -s *.so查看此信息。
+Andriod HAL模块也有一个通用的入口地址，这个入口地址就是HAL_MODULE_INFO_SYM变量，
+通过它，我们可以访问到HAL模块中的所有想要外部访问到的方法
+/*
+ * The lights Module
+ */
+ struct hw_module_t HAL_MODULE_INFO_SYM = {
+     .tag = HARDWARE_MODULE_TAG,
+     .version_major = 1,
+     .version_minor = 0,
+     .id = LIGHTS_HARDWARE_MODULE_ID,
+     .name = "lights Module",
+     .author = "Google, Inc.",
+     .methods = &lights_module_methods,
+ };
+
+
+
+###AOSP/hardware/libhardware/hardware.c###
+int hw_get_module(const char *id, const struct hw_module_t **module)
+{
+    return hw_get_module_by_class(id, NULL, module);
+}
+
+int hw_get_module_by_class(const char *class_id, const char *inst,
+                           const struct hw_module_t **module)
+{
+    int i = 0;
+    char prop[PATH_MAX] = {0};
+    char path[PATH_MAX] = {0};
+    char name[PATH_MAX] = {0};
+    char prop_name[PATH_MAX] = {0};
+
+
+    if (inst)
+        snprintf(name, PATH_MAX, "%s.%s", class_id, inst);
+    else
+        strlcpy(name, class_id, PATH_MAX);
+
+    /*
+     * Here we rely on the fact that calling dlopen multiple times on
+     * the same .so will simply increment a refcount (and not load
+     * a new copy of the library).
+     * We also assume that dlopen() is thread-safe.
+     */
+
+    /* First try a property specific to the class and possibly instance */
+    snprintf(prop_name, sizeof(prop_name), "ro.hardware.%s", name);
+    if (property_get(prop_name, prop, NULL) > 0) {
+        if (hw_module_exists(path, sizeof(path), name, prop) == 0) {
+            goto found;
+        }
+    }
+
+    /* Loop through the configuration variants looking for a module */
+    for (i=0 ; i<HAL_VARIANT_KEYS_COUNT; i++) {
+        if (property_get(variant_keys[i], prop, NULL) == 0) {
+            continue;
+        }
+        if (hw_module_exists(path, sizeof(path), name, prop) == 0) {
+            goto found;
+        }
+    }
+
+    /* Nothing found, try the default */
+    if (hw_module_exists(path, sizeof(path), name, "default") == 0) {
+        goto found;
+    }
+
+    return -ENOENT;
+
+found:
+    /* load the module, if this fails, we're doomed, and we should not try
+     * to load a different variant. */
+    return load(class_id, path, module);
+}
+
+/**
+ * Load the file defined by the variant and if successful
+ * return the dlopen handle and the hmi.
+ * @return 0 = success, !0 = failure.
+ */
+static int load(const char *id,
+        const char *path,
+        const struct hw_module_t **pHmi)
+{
+    int status = -EINVAL;
+    void *handle = NULL;
+    struct hw_module_t *hmi = NULL;
+#ifdef __ANDROID_VNDK__
+    const bool try_system = false;
+#else
+    const bool try_system = true;
+#endif
+
+    /*
+     * load the symbols resolving undefined symbols before
+     * dlopen returns. Since RTLD_GLOBAL is not or'd in with
+     * RTLD_NOW the external symbols will not be global
+     */
+    if (try_system &&
+        strncmp(path, HAL_LIBRARY_PATH1, strlen(HAL_LIBRARY_PATH1)) == 0) {
+        /* If the library is in system partition, no need to check
+         * sphal namespace. Open it with dlopen.
+         */
+        handle = dlopen(path, RTLD_NOW);
+    } else {
+        handle = android_load_sphal_library(path, RTLD_NOW);
+    }
+    if (handle == NULL) {
+        char const *err_str = dlerror();
+        ALOGE("load: module=%s\n%s", path, err_str?err_str:"unknown");
+        status = -EINVAL;
+        goto done;
+    }
+
+    /* Get the address of the struct hal_module_info. */
+    const char *sym = HAL_MODULE_INFO_SYM_AS_STR;
+    hmi = (struct hw_module_t *)dlsym(handle, sym);
+    if (hmi == NULL) {
+        ALOGE("load: couldn't find symbol %s", sym);
+        status = -EINVAL;
+        goto done;
+    }
+
+    /* Check that the id matches */
+    if (strcmp(id, hmi->id) != 0) {
+        ALOGE("load: id=%s != hmi->id=%s", id, hmi->id);
+        status = -EINVAL;
+        goto done;
+    }
+
+    hmi->dso = handle;
+
+    /* success */
+    status = 0;
+
+    done:
+    if (status != 0) {
+        hmi = NULL;
+        if (handle != NULL) {
+            dlclose(handle);
+            handle = NULL;
+        }
+    } else {
+        ALOGV("loaded HAL id=%s path=%s hmi=%p handle=%p",
+                id, path, *pHmi, handle);
+    }
+
+    *pHmi = hmi;
+
+    return status;
+}

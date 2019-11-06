@@ -1,0 +1,47 @@
+socket
+
+socket是应用层与TCP/IP协议族通信的中间软件抽象层，它是一组接口。
+可以实现“打开open –> 读写write/read –> 关闭close”的模式
+服务端：
+1.初始化socket；
+	socket_fd = socket(AF_INET, SOCK_STREAM, 0))
+2.申请内存
+	struct sockaddr_un un, cliun
+	memset(&un, 0, sizeof(un));
+3.绑定地址
+	bind(socket_fd, (struct sockaddr*)&servaddr, sizeof(servaddr))
+4.监听客户端连接
+	listen(socket_fd, 10)
+5.接受请求，返回新的此连接的socket：
+	connect_fd = accept(socket_fd, (struct sockaddr*)NULL, NULL))
+6.接受客户端传来的数据
+	n = recv(connect_fd, buff, MAXLINE, 0);
+7.用返回的socket和客户端进行通信
+	send(connect_fd, "Hello,you are connected!\n", 26,0)
+8.关闭socket
+	close(connect_fd);
+	close(socket_fd); 
+
+服务器端先初始化Socket，然后与端口绑定(bind)，对端口进行监听(listen)，调用accept阻塞，
+等待客户端连接。在这时如果有个客户端初始化一个Socket，然后连接服务器(connect)，
+如果连接成功，这时客户端与服务器端的连接就建立了。客户端发送数据请求，服务器端接收请求并处理请求，
+然后把回应数据发送给客户端，客户端读取数据，最后关闭连接，一次交互结束。
+
+
+setsockopt()函数，设置socket的属性，
+unlink()函数功能即为删除文件。执行unlink()函数会删除所给参数指定的文件。
+注意：
+	执行unlink()函数并不一定会真正的删除文件，它先会检查文件系统中此文件的连接数是否为1，如果不是1说明此文件还有其他链接对象，因此只对此文件的连接数进行减1操作。若连接数为1，并且在此时没有任何进程打开该文件，此内容才会真正地被删除掉。在有进程打开此文件的情况下，则暂时不会删除，直到所有打开该文件的进程都结束时文件就会被删除。
+	返回值：成功返回0，失败返回 -1
+————————————————
+版权声明：本文为CSDN博主「judgejames」的原创文章，遵循 CC 4.0 BY-SA 版权协议，转载请附上原文出处链接及本声明。
+原文链接：https://blog.csdn.net/judgejames/article/details/83749669
+
+
+用于任意类型、任意状态套接口的设置选项值。尽管在不同协议层上存在选项，但本函数仅定义了最高的“套接口”层次上的选项。
+int setsockopt(int sockfd, int level, int optname,const void *optval, socklen_t optlen);
+sockfd：标识一个套接口的描述字。
+level：选项定义的层次；支持SOL_SOCKET、IPPROTO_TCP、IPPROTO_IP和IPPROTO_IPV6。
+optname：需设置的选项。
+optval：指针，指向存放选项待设置的新值的缓冲区。
+optlen：optval缓冲区长度。
